@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import Papa from 'papaparse';
 
 const EmploymentChart = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [peakEmployment, setPeakEmployment] = useState(null);
+  const [finalEmployment, setFinalEmployment] = useState(null);
+  const [peakEmploymentDate, setPeakEmploymentDate] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -34,6 +37,20 @@ const EmploymentChart = () => {
           sortDate: new Date(row.Date)
         }));
 
+        // Find peak employment and its date
+        let maxEmployment = 0;
+        let maxEmploymentIndex = 0;
+        
+        chartData.forEach((item, index) => {
+          if (item.employment > maxEmployment) {
+            maxEmployment = item.employment;
+            maxEmploymentIndex = index;
+          }
+        });
+        
+        setPeakEmployment(maxEmployment);
+        setPeakEmploymentDate(chartData[maxEmploymentIndex].date);
+        setFinalEmployment(chartData[chartData.length - 1].employment);
         setData(chartData);
         setLoading(false);
       } catch (error) {
@@ -56,9 +73,28 @@ const EmploymentChart = () => {
     return (value / 1000).toFixed(0) + 'K';
   };
 
+  // Calculate Y-axis ticks at 10K intervals
+  const calculateYAxisTicks = () => {
+    if (data.length === 0) return [];
+    
+    const minValue = Math.floor(Math.min(...data.map(d => d.employment)) / 10000) * 10000;
+    const maxValue = Math.ceil(Math.max(...data.map(d => d.employment)) / 10000) * 10000;
+    
+    const ticks = [];
+    for (let i = minValue; i <= maxValue; i += 10000) {
+      ticks.push(i);
+    }
+    
+    return ticks;
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-96">Loading...</div>;
   }
+
+  // Find index of peak employment for reference line
+  const peakIndex = data.findIndex(d => d.employment === peakEmployment);
+  const peakItem = peakIndex !== -1 ? data[peakIndex] : null;
 
   return (
     <div className="w-full p-6 bg-white">
@@ -70,13 +106,13 @@ const EmploymentChart = () => {
         Employment numbers in thousands
       </div>
 
-      <ResponsiveContainer width="100%" height={500}>
+      <ResponsiveContainer width="100%" height={600}>
         <LineChart
           data={data}
           margin={{
-            top: 20,
-            right: 30,
-            left: 20,
+            top: 30,
+            right: 80,
+            left: 30,
             bottom: 60,
           }}
         >
@@ -92,6 +128,9 @@ const EmploymentChart = () => {
           <YAxis 
             tickFormatter={formatYAxis}
             fontSize={12}
+            ticks={calculateYAxisTicks()} // Use custom ticks at 10K intervals
+            domain={['dataMin - 10000', 'dataMax + 10000']} // Add padding to Y-axis
+            padding={{ top: 20, bottom: 20 }}
           />
           <Tooltip 
             formatter={formatTooltip}
@@ -103,6 +142,45 @@ const EmploymentChart = () => {
             }}
           />
           <Legend />
+          
+          {/* Reference line for peak employment */}
+          {peakItem && (
+            <ReferenceLine 
+              x={peakItem.date} 
+              stroke="#10b981" 
+              strokeDasharray="3 3"
+              strokeWidth={2}
+            >
+              <Label 
+                value={`Peak: ${peakEmployment.toLocaleString()}`} 
+                position="insideTopRight" 
+                fill="#10b981"
+                fontSize={12}
+                fontWeight="bold"
+                offset={10}
+              />
+            </ReferenceLine>
+          )}
+          
+          {/* Reference line for final value */}
+          {data.length > 0 && (
+            <ReferenceLine 
+              x={data[data.length - 1].date} 
+              stroke="#6366f1" 
+              strokeDasharray="3 3"
+              strokeWidth={2}
+            >
+              <Label 
+                value={`Final: ${finalEmployment.toLocaleString()}`} 
+                position="insideTopRight" 
+                fill="#6366f1"
+                fontSize={12}
+                fontWeight="bold"
+                offset={-20}
+              />
+            </ReferenceLine>
+          )}
+          
           <Line 
             type="monotone" 
             dataKey="employment" 
@@ -126,9 +204,8 @@ const EmploymentChart = () => {
         <div className="bg-green-50 p-4 rounded-lg">
           <h3 className="font-semibold text-green-800 mb-2">Peak Employment</h3>
           <p className="text-green-600">
-            {data.length > 0 && 
-              Math.max(...data.map(d => d.employment)).toLocaleString()
-            }
+            {peakEmployment && peakEmployment.toLocaleString()}
+            {peakEmploymentDate && ` (${peakEmploymentDate})`}
           </p>
         </div>
         
